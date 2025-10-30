@@ -2,11 +2,20 @@
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
-const cors = require('cors');
+
 const { Pool } = require('pg');
+
 const app = express();
 
-app.use(cors());
+const cors = require('cors');
+
+app.use(cors({
+  origin: ['http://127.0.0.1:5500', 'http://localhost:3000'], // frontend origins
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  credentials: true
+}));
+
 app.use(bodyParser.json({ limit: '2mb' }));
 
 const pool = new Pool({
@@ -22,6 +31,9 @@ app.post('/api/v1/events', async (req, res) => {
   const events = Array.isArray(req.body) ? req.body : [req.body];
   const client = await pool.connect();
   try {
+
+    console.log('📩 Received events:', JSON.stringify(events, null, 2));
+
     await client.query('BEGIN');
     const insertText = `INSERT INTO events(id, client_id, session_id, user_id, ts, page_url, page_path, event_type, x, y, scroll_y, meta)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`;
@@ -74,6 +86,8 @@ app.get('/api/v1/events', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`Backend listening on http://localhost:${port}`));

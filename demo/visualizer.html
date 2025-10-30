@@ -1,66 +1,87 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Click Visualizer</title>
+  <link rel="icon" href="data:,">
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; }
-    #viewport { position: relative; width: 1024px; height: 768px; border: 1px solid #ddd; margin-bottom:10px; background: #fafafa; overflow: hidden; }
-    .dot { position: absolute; width: 12px; height: 12px; border-radius: 50%; opacity: 0.85; pointer-events: none; transform: translate(-50%, -50%); }
+    #viewport {
+      position: relative;
+      width: 1024px;
+      height: 768px;
+      border: 1px solid #ddd;
+      margin-bottom: 10px;
+      background: #fafafa;
+      overflow: hidden;
+    }
+    .dot {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      opacity: 0.85;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+    }
     #controls { margin-bottom: 10px; }
   </style>
 </head>
 <body>
-  <h2>Click Visualizer (fetches events)</h2>
+  <h2>Click Visualizer</h2>
   <div id="controls">
     Page path: <input id="page" type="text" value="/" style="width:200px" />
     Limit: <input id="limit" type="number" value="500" style="width:80px" />
-    <button id="load">Load events</button>
-    <button id="seed">Seed random events (backend)</button>
+    <button id="load">Load Events</button>
   </div>
   <div id="viewport"></div>
   <pre id="info"></pre>
 
 <script>
 const VIEW_W = 1024, VIEW_H = 768;
-const backendBase = 'http://localhost:4000';
-async function loadEvents(){
-  const page = document.getElementById('page').value || '/';
-  const limit = Number(document.getElementById('limit').value) || 500;
-  const res = await fetch(`${backendBase}/api/v1/events?page=${encodeURIComponent(page)}&limit=${limit}`);
-  const json = await res.json();
-  const rows = json.rows || [];
-  const vp = document.getElementById('viewport');
-  vp.innerHTML = '';
-  let clickCount = 0;
-  for (const r of rows){
-    if (r.event_type === 'click' && r.x !== null && r.y !== null){
-      clickCount++;
-      const d = document.createElement('div');
-      d.className = 'dot';
-      // Simple color scaling by recency: newer -> redder
-      const age = new Date() - new Date(r.ts);
-      const t = Math.min(1, Math.max(0, 1 - age / (1000*60*60*24))); // 1 for today, 0 for old
-      const hue = Math.floor(10 + 120*(1-t)); // red->green-ish
-      d.style.background = `hsl(${hue}, 80%, 50%)`;
-      d.style.left = Math.round((r.x / Math.max(r.x, VIEW_W)) * VIEW_W) + 'px';
-      d.style.top = Math.round((r.y / Math.max(r.y, VIEW_H)) * VIEW_H) + 'px';
-      d.title = `${r.event_type} ${r.ts}`;
-      vp.appendChild(d);
-    }
+const API_URL = 'http://localhost:4000/api/v1/events';
+
+async function loadEvents() {
+  const page = document.getElementById('page').value.trim() || '/';
+  const limit = parseInt(document.getElementById('limit').value, 10) || 500;
+
+  try {
+    const res = await fetch(`${API_URL}?page=${encodeURIComponent(page)}&limit=${limit}&_=${Date.now()}`);
+    const { rows = [] } = await res.json();
+
+    const vp = document.getElementById('viewport');
+    vp.innerHTML = '';
+    let clickCount = 0;
+
+    rows.forEach(r => {
+      if (r.event_type === 'click' && r.x != null && r.y != null) {
+        clickCount++;
+        const d = document.createElement('div');
+        d.className = 'dot';
+
+        // Color by recency (newer = redder)
+        const hoursOld = (Date.now() - new Date(r.ts)) / 3_600_000;
+        const hue = Math.max(0, Math.min(120, 120 - hoursOld * 10)); // fade to greenish as it gets older
+        d.style.background = `hsl(${hue}, 80%, 50%)`;
+
+        // Use absolute coordinates directly
+        d.style.left = `${r.x}px`;
+        d.style.top = `${r.y}px`;
+        d.title = `${r.event_type} @ (${r.x},${r.y})`;
+        vp.appendChild(d);
+      }
+    });
+
+    document.getElementById('info').textContent =
+      `Loaded ${rows.length} events, plotted ${clickCount} clicks.`;
+
+  } catch (err) {
+    document.getElementById('info').textContent = 'Error fetching events: ' + err.message;
+    console.error('Error loading events:', err);
   }
-  document.getElementById('info').textContent = `Loaded ${rows.length} events, plotted ${clickCount} clicks.`;
 }
 
 document.getElementById('load').addEventListener('click', loadEvents);
-
-// Seed random events by calling the backend / run seed that inserts events (optional)
-document.getElementById('seed').addEventListener('click', async () => {
-  const page = prompt('Page path to seed events for (e.g. /):', '/');
-  if (!page) return;
-  // Hit backend seed endpoint? Our seed script is run via node manually.
-  alert('To seed, run `npm run seed` in backend/ directory (server must be able to access DB). See README.');
-});
 </script>
 </body>
 </html>
