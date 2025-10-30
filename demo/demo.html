@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Demo page — tracking test</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 40px; }
+    .product { width: 800px; margin: 0 auto; }
+    .btn { padding: 12px 20px; background:#007bff; color:white; border-radius:6px; cursor:pointer; display:inline-block; margin-top:10px;}
+  </style>
+</head>
+<body>
+  <div class="product">
+    <h1>Demo Product</h1>
+    <p>This is a demo page to test tracking integration. Click anywhere and scroll to generate events.</p>
+    <div class="btn" id="buy">Buy now</div>
+    <div style="height:1400px"></div>
+  </div>
+
+  <script>
+  (function(){
+    // Minimal tracking snippet
+    const BACKEND = 'http://localhost:4000/api/v1/events';
+    const clientId = localStorage.getItem('cj_client') || (function(){ const id = 'cid-'+Date.now()+'-'+Math.random().toString(36).slice(2); localStorage.setItem('cj_client', id); return id; })();
+    const sessionId = 's-'+Date.now()+'-'+Math.random().toString(36).slice(2);
+
+    function sendEvent(eventObj){
+      // Use sendBeacon when available (fires on unload too)
+      try {
+        const body = JSON.stringify(eventObj);
+        if (navigator.sendBeacon) {
+          const blob = new Blob([body], { type: 'application/json' });
+          navigator.sendBeacon(BACKEND, blob);
+          return;
+        }
+      } catch(e) { /* ignore */ }
+      fetch(BACKEND, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(eventObj)
+      }).catch(e => console.error('send event error', e));
+    }
+
+    // Click
+    window.addEventListener('click', (e) => {
+      const ev = {
+        clientId, sessionId, userId: null,
+        ts: new Date().toISOString(),
+        pageUrl: location.href,
+        pagePath: location.pathname,
+        eventType: 'click',
+        x: Math.round(e.pageX),
+        y: Math.round(e.pageY),
+        meta: { tag: e.target.tagName, id: e.target.id || null, classes: e.target.className || null }
+      };
+      sendEvent(ev);
+    });
+
+    // Scroll - rate limited
+    let lastScroll = 0;
+    window.addEventListener('scroll', (e) => {
+      const now = Date.now();
+      if (now - lastScroll < 1000) return;
+      lastScroll = now;
+      const ev = {
+        clientId, sessionId, userId: null,
+        ts: new Date().toISOString(),
+        pageUrl: location.href,
+        pagePath: location.pathname,
+        eventType: 'scroll',
+        scrollY: Math.round(window.scrollY),
+        meta: {}
+      };
+      sendEvent(ev);
+    });
+
+    // Synthetic custom event
+    document.getElementById('buy').addEventListener('click', () => {
+      const ev = {
+        clientId, sessionId, userId: null,
+        ts: new Date().toISOString(),
+        pageUrl: location.href,
+        pagePath: location.pathname,
+        eventType: 'add_to_cart',
+        meta: { productId: 'demo-001' }
+      };
+      sendEvent(ev);
+      alert('Simulated add_to_cart event sent');
+    });
+
+  })();
+  </script>
+</body>
+</html>
